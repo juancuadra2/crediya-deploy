@@ -1,0 +1,301 @@
+# ==========================================
+# VARIABLES COMUNES REUTILIZABLES
+# ==========================================
+x-postgres-auth-env: &postgres-auth-env
+  POSTGRES_DB: &postgres-auth-db crediya_auth
+  POSTGRES_USER: &postgres-auth-user jcuadrado_auth
+  POSTGRES_PASSWORD: &postgres-auth-password jcuadrado_auth
+  POSTGRES_EXTERNAL_PORT: &postgres-auth-external-port 5432
+
+x-postgres-requests-env: &postgres-requests-env
+  POSTGRES_DB: &postgres-requests-db crediya_requests
+  POSTGRES_USER: &postgres-requests-user jcuadrado_requests
+  POSTGRES_PASSWORD: &postgres-requests-password jcuadrado_requests
+  POSTGRES_EXTERNAL_PORT: &postgres-requests-external-port 5433
+
+x-kafka-env: &kafka-env
+  KAFKA_BOOTSTRAP_SERVERS: &kafka-bootstrap-servers kafka:29092
+
+x-common-env: &common-env
+  JWT_SECRET: &jwt-secret amN1YWRyYWRvX3NlY3JldF9rZXlfZm9yX2p3dF90b2tlbl9nZW5lcmF0aW9u
+  AUTH_SERVICE_PORT: &auth-service-port 8080
+  REQUESTS_SERVICE_PORT: &requests-service-port 8081
+
+services:
+  # ==========================================
+  # BASES DE DATOS
+  # ==========================================
+  
+  postgres-crediya_auth:
+    image: postgres:17
+    container_name: postgres-crediya_auth
+    environment:
+      <<: *postgres-auth-env
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+    command: |
+      postgres 
+      -c wal_level=logical 
+      -c max_wal_senders=3 
+      -c max_replication_slots=3
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_crediya_auth_data:/var/lib/postgresql/data
+      - ./configs/postgres/init-crediya_auth-db.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - microservices-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jcuadrado_auth -d crediya_auth"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  postgres-requests:
+    image: postgres:17
+    container_name: postgres-requests
+    environment:
+      <<: *postgres-requests-env
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_crediya_requests_data:/var/lib/postgresql/data
+      - ./configs/postgres/init-crediya_requests-db.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - microservices-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jcuadrado_requests -d crediya_requests"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # ==========================================
+  # KAFKA ECOSYSTEM
+  # ==========================================
+  
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.4.0
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - microservices-network
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo 'ruok' | nc localhost 2181"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  kafka:
+    image: confluentinc/cp-kafka:7.4.0
+    container_name: kafka
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    ports:
+      - "9092:9092"
+      - "9101:9101"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_JMX_PORT: 9101
+      KAFKA_JMX_HOSTNAME: localhost
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: true
+    networks:
+      - microservices-network
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    depends_on:
+      kafka:
+        condition: service_healthy
+    ports:
+      - "8090:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+    networks:
+      - microservices-network
+
+  # ==========================================
+  # DEBEZIUM PARA CDC
+  # ==========================================
+  
+  kafka-connect:
+    image: debezium/connect:2.7.3.Final
+    container_name: kafka-connect
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres-crediya_auth:
+        condition: service_healthy
+    ports:
+      - "8083:8083"
+    environment:
+      BOOTSTRAP_SERVERS: kafka:29092
+      GROUP_ID: 1
+      CONFIG_STORAGE_TOPIC: my_connect_configs
+      OFFSET_STORAGE_TOPIC: my_connect_offsets
+      STATUS_STORAGE_TOPIC: my_connect_statuses
+      KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_KEY_CONVERTER_SCHEMAS_ENABLE: false
+      CONNECT_VALUE_CONVERTER_SCHEMAS_ENABLE: false
+    networks:
+      - microservices-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8083/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # ==========================================
+  # CONFIGURACIÓN AUTOMÁTICA DE DEBEZIUM
+  # ==========================================
+  
+  debezium-setup:
+    image: curlimages/curl:latest
+    container_name: debezium-setup
+    depends_on:
+      kafka-connect:
+        condition: service_healthy
+    volumes:
+      - ./configs/debezium:/configs
+    networks:
+      - microservices-network
+    command: >
+      sh -c "
+        echo 'Esperando a que Kafka Connect esté completamente listo...' &&
+        sleep 30 &&
+        echo 'Configurando conector de Debezium...' &&
+        curl -i -X POST -H 'Accept:application/json' -H 'Content-Type:application/json' http://kafka-connect:8083/connectors/ -d @/configs/connector-config.json &&
+        echo 'Conector de Debezium configurado exitosamente!' &&
+        echo 'Verificando estado del conector...' &&
+        curl -s http://kafka-connect:8083/connectors/ &&
+        echo 'Configuración completada. El contenedor se detendrá automáticamente.'
+      "
+    restart: "no"
+
+  # ==========================================
+  # MICROSERVICIOS
+  # ==========================================
+  
+  crediya-ms-auth:
+    build:
+      context: ./micros/crediya-ms-auth
+      dockerfile: deployment/Dockerfile
+    container_name: crediya-ms-auth
+    depends_on:
+      postgres-crediya_auth:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SERVER_PORT: *auth-service-port
+      # Database configuration (reutilizando variables)
+      DB_HOST: postgres-crediya_auth
+      DB_PORT: 5432
+      DB_NAME: *postgres-auth-db
+      DB_USERNAME: *postgres-auth-user
+      DB_PASSWORD: *postgres-auth-password
+      # Security (reutilizando variables)
+      JWT_SECRET: *jwt-secret
+      JWT_EXPIRATION: 3600000
+    networks:
+      - microservices-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  crediya-ms-requests:
+    build:
+      context: ./micros/crediya-ms-requests
+      dockerfile: deployment/Dockerfile
+    container_name: crediya-ms-requests
+    depends_on:
+      postgres-requests:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      crediya-ms-auth:
+        condition: service_healthy
+    ports:
+      - "8081:8081"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SERVER_PORT: *requests-service-port
+      # Database configuration (reutilizando variables)
+      DB_HOST: postgres-requests
+      DB_PORT: 5432
+      DB_NAME: *postgres-requests-db
+      DB_USERNAME: *postgres-requests-user
+      DB_PASSWORD: *postgres-requests-password
+      # Kafka configuration (reutilizando variables)
+      KAFKA_BOOTSTRAP_SERVERS: *kafka-bootstrap-servers
+      KAFKA_GROUP_ID: CrediYaMsRequests-docker
+      # Security (reutilizando variables)
+      JWT_SECRET: *jwt-secret
+      # External services
+      USERS_SERVICE_URL: http://crediya-ms-auth:8080
+    networks:
+      - microservices-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8081/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+
+  # ==========================================
+  # HERRAMIENTAS DE MONITOREO
+  # ==========================================
+  
+  # prometheus:
+  #   image: prom/prometheus:latest
+  #   container_name: prometheus
+  #   ports:
+  #     - "9090:9090"
+  #   volumes:
+  #     - ./configs/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+  #   networks:
+  #     - microservices-network
+
+  # grafana:
+  #   image: grafana/grafana:latest
+  #   container_name: grafana
+  #   ports:
+  #     - "3000:3000"
+  #   environment:
+  #     GF_SECURITY_ADMIN_PASSWORD: admin123
+  #   volumes:
+  #     - grafana_data:/var/lib/grafana
+  #   networks:
+  #     - microservices-network
+
+networks:
+  microservices-network:
+    driver: bridge
+
+volumes:
+  postgres_crediya_auth_data:
+  postgres_crediya_requests_data:
+  grafana_data:

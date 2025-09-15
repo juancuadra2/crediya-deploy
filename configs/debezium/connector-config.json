@@ -1,0 +1,26 @@
+{
+  "name": "users-connector",
+  "config": {
+    "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+    "database.hostname": "postgres-crediya_auth",
+    "database.port": "5432",
+    "database.user": "jcuadrado_auth",
+    "database.password": "jcuadrado_auth",
+    "database.dbname": "crediya_auth",
+    "database.server.name": "crediya_auth_server",
+    "table.include.list": "public.users",
+    "topic.prefix": "dbserver1",
+    "plugin.name": "pgoutput",
+    "slot.name": "debezium_slot",
+    "publication.name": "dbz_publication",
+    "key.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "key.converter.schemas.enable": false,
+    "value.converter.schemas.enable": false,
+    "transforms": "unwrap",
+    "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
+    "transforms.unwrap.drop.tombstones": false,
+    "transforms.unwrap.delete.handling.mode": "rewrite",
+    "snapshot.mode": "initial"
+  }
+}
