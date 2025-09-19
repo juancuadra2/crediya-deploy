@@ -1,18 +1,43 @@
+# =====================
+# Archivos y carpetas a ignorar
+# =====================
+
+# Gradle cache y builds
 .gradle
 **/build
 build
-.gradle
+**/build-cache
+
+# Git
 .git
 .gitignore
-Dockerfile
-**/Dockerfile
-**/build-cache
+
+# IDEs / configuración local
 .idea
 .vscode
 *.iml
+
+# Logs y archivos temporales
 *.log
-target
+*.tmp
+*.swp
+*.DS_Store
+
+# Node / front (si hay integraciones)
 node_modules
-**/*.bat
-**/*.cmd
-**/*.ps1
+dist
+coverage
+
+# Maven (por si hay mezcla)
+target
+
+# Archivos de Docker
+Dockerfile
+**/Dockerfile
+docker-compose*.yml
+
+# =====================
+# IMPORTANTE: no ignores gradlew
+# =====================
+# No excluir gradlew ni gradlew.bat, son necesarios para builds reproducibles
+# Por eso NO se pone `*.bat` ni `*.cmd` aquí

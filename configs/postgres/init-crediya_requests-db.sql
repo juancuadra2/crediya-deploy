@@ -31,9 +31,6 @@ CREATE TABLE IF NOT EXISTS clients (
     base_salary     numeric(10,2) NOT NULL DEFAULT 0
 );
 
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO jcuadrado_requests;
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO jcuadrado_requests;
-
 INSERT INTO public.status (id, name, description) VALUES ('6764c1d3-0b6a-4593-b16c-6b1c337c2c10', 'APPROVED', 'La solicitud fue aprobada y está lista para continuar con el desembolso.');
 INSERT INTO public.status (id, name, description) VALUES ('344511f5-4cc7-4d8d-b508-8fc46ce9ff01', 'REJECTED', 'La solicitud fue rechazada y no continuará con el proceso.');
 INSERT INTO public.status (id, name, description) VALUES ('73cf2ad1-fcc7-4c89-8c81-51f6d23d5102', 'MANUAL_REVIEW', 'La solicitud requiere una revisión manual por parte de un analista.');

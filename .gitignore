@@ -1,2 +1,28 @@
 micros
 doc
+
+# Variables de entorno sensibles
+.env
+.env.local
+.env.production
+.env.staging
+
+# Archivos de configuración con datos sensibles
+*.key
+*.pem
+*.p12
+*.pfx
+
+# Logs
+*.log
+logs/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Sistema operativo
+.DS_Store
+Thumbs.db

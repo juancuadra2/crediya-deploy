@@ -18,9 +18,6 @@ CREATE TABLE IF NOT EXISTS users (
     password        varchar(255)
 );
 
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO jcuadrado_auth;
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO jcuadrado_auth;
-
 INSERT INTO public.roles (id, name, description) VALUES ('abc5d4c9-dec3-45d3-98b6-d3b7ce764cda', 'CLIENT', 'Usuarios clientes');
 INSERT INTO public.roles (id, name, description) VALUES ('87fd46b7-b23b-48ef-888d-e8f17fa168f9', 'ADMIN', 'Usuarios administrador del sistema');
 INSERT INTO public.roles (id, name, description) VALUES ('62da0fe0-6b4d-43fa-af31-b90c04f9d046', 'ADVISER', 'Usuarios asesores');
