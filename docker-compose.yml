@@ -89,28 +89,6 @@ services:
       timeout: 10s
       retries: 5
 
-  kafka-ui:
-    image: provectuslabs/kafka-ui:latest
-    container_name: kafka-ui
-    depends_on:
-      kafka:
-        condition: service_healthy
-    ports:
-      - "8090:8080"
-    environment:
-      KAFKA_CLUSTERS_0_NAME: local
-      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
-      # JVM optimization for Kafka UI
-      JAVA_OPTS: "-Xmx256m -Xms128m"
-    networks:
-      - microservices-network
-    deploy:
-      resources:
-        limits:
-          memory: 384M
-        reservations:
-          memory: 128M
-
   # ==========================================
   # DEBEZIUM PARA CDC (CHANGE DATA CAPTURE)
   # ==========================================
